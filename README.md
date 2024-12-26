@@ -1,4 +1,3 @@
-OrdinaryVoice
 OrdinaryVoice adalah aplikasi berbasis web yang dikembangkan menggunakan Streamlit untuk membantu pengguna mengenali karakteristik suara mereka. Pengguna dapat merekam suara melalui aplikasi, dan setelah perekaman selesai, suara mereka dianalisis untuk mendeteksi jenis suara seperti sopran, tenor, bass, dan lainnya.
 Aplikasi ini menggunakan model pembelajaran mesin untuk memprediksi jenis suara berdasarkan ekstraksi fitur dari rekaman suara, termasuk MFCC, chroma, spectral contrast, dan lainnya.
 
