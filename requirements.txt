@@ -1,7 +1,7 @@
 sounddevice==0.4.6
 librosa
 streamlit==1.27.2
-PyAudio-0.2.14-cp310-cp310-win_amd64.whl
+PyAudio-0.2.14
 numpy==1.26.0
 pandas==2.1.1
 scikit-learn==1.2.2
