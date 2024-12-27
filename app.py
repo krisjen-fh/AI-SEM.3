@@ -1,28 +1,45 @@
 import streamlit as st
-import sounddevice as sd
-import numpy as np
+import pyaudio
 import wave
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
 from PreProcess import PreProcess
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from joblib import load
+import numpy as np
 
-def record_audio(seconds):
-    fs = 44100  # Sample rate
+# Function to record audio using PyAudio
+def record_audio_pyaudio(seconds, filename):
+    chunk = 1024  # Record in chunks of 1024 samples
+    format = pyaudio.paInt16  # 16-bit format
+    channels = 1  # Mono
+    rate = 44100  # Sample rate
+    frames = []
+
+    audio = pyaudio.PyAudio()
+
+    # Start recording
     st.write("Merekam...")
-    audio = sd.rec(int(seconds * fs), samplerate=fs, channels=1, dtype='int16')
-    sd.wait() 
-    st.write("Rekaman selesai.")
-    return audio
+    stream = audio.open(format=format, channels=channels,
+                        rate=rate, input=True,
+                        frames_per_buffer=chunk)
 
-def save_audio(audio, filename):
+    for i in range(0, int(rate / chunk * seconds)):
+        data = stream.read(chunk)
+        frames.append(data)
+
+    # Stop recording
+    stream.stop_stream()
+    stream.close()
+    audio.terminate()
+    st.write("Rekaman selesai.")
+
+    # Save audio as .wav file
     with wave.open(filename, 'wb') as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)  # 2 bytes for int16
-        wf.setframerate(44100)
-        wf.writeframes(audio.tobytes())
+        wf.setnchannels(channels)
+        wf.setsampwidth(audio.get_sample_size(format))
+        wf.setframerate(rate)
+        wf.writeframes(b''.join(frames))
 
 st.title("OrdinaryVoice")
 st.subheader("Ayo kenali suara mu!")
@@ -30,21 +47,9 @@ st.write("Klik tombol di bawah untuk merekam suara Anda. Setelah selesai, suara 
 st.write("### Rekam Suara Anda")
 
 file_name = "output.wav"
-if st.button("Rekam Audio (SoundDevice)"):
-    frames = record_audio(10)  # Record for 10 seconds
-    save_audio(frames, file_name)
+if st.button("Rekam Audio (PyAudio)"):
+    record_audio_pyaudio(10, file_name)  # Record for 10 seconds
     st.success("Audio telah direkam dan disimpan sebagai output.wav")
-
-webrtc_streamer(
-    key="voice-recorder",
-    mode=WebRtcMode.SENDRECV,
-    client_settings=ClientSettings(
-        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-        media_stream_constraints={"audio": True, "video": False},
-    ),
-    audio_receiver_size=1024,  
-    video_transformer_factory=None,  
-)
 
 st.write("Setelah Anda selesai merekam, kami akan mengolah suara Anda untuk mendeteksi karakteristik unik suara Anda!")
 
@@ -52,6 +57,7 @@ pp = PreProcess(file_name)
 
 if st.button("Analisis Suara"):
     try:
+        # Extract features from the recorded audio
         new_fhe = pp.extract_fhe()
         new_sc = pp.extract_sc()
         new_sb = pp.extract_sb()
@@ -63,6 +69,8 @@ if st.button("Analisis Suara"):
         new_scon_ = pp.spectral_contrast_range()
         new_sflat_ = pp.spectral_flatness_range()
         new_srolof_ = pp.spectral_rolloff_range()
+
+        # Combine all features into a single list
         new_features = (
             [new_fhe, new_sc, new_avg_f0, new_sb]
             + list(new_mfcc)
@@ -74,6 +82,7 @@ if st.button("Analisis Suara"):
         )
         new_features = [f[0] if isinstance(f, np.ndarray) else f for f in new_features]
 
+        # Standardize features
         scaler = StandardScaler()
         file = pd.read_csv("Features.csv")
         file = file.drop(columns=["Unnamed: 0"])
@@ -91,6 +100,7 @@ if st.button("Analisis Suara"):
         X = file.drop(columns=drop_features)
         y = file["Jenis_suara"]
 
+        # Encode labels
         y_encoded = []
         for i in y:
             if i == "sopran":
@@ -105,21 +115,21 @@ if st.button("Analisis Suara"):
                 i = 4
             y_encoded.append(i)
 
+        # Split data for training
         X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42)
         X_train = np.array(X_train)
         scaler.fit(X_train)
 
+        # Scale new features
         new_features_scaled = scaler.transform([new_features])
-        print(new_features_scaled)
-        print(len(*new_features_scaled))
 
-        # Load the model
+        # Load the pre-trained model
         loaded_model = load("model.joblib")
         result = loaded_model.predict(new_features_scaled)
 
+        # Map result to corresponding label
         label_map = {0: "Sopran", 1: "Mezzo Sopran", 2: "Tenor", 3: "Baritone", 4: "Bass"}
         predicted_label = label_map.get(result[0], "Tidak Diketahui")
-        print(predicted_label)
 
         st.success(f"Prediksi suara Anda adalah: **{predicted_label}**")
     except Exception as e:
